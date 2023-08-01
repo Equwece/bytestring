@@ -151,6 +151,7 @@ module Data.ByteString (
 
         -- ** Search for arbitrary substrings
         breakSubstring,
+        splitOn,
 
         -- * Searching ByteStrings
 
@@ -1632,6 +1633,19 @@ breakSubstring pat =
             b  = fromIntegral (unsafeIndex src i)
             w' = mask .&. ((w `shiftL` 8) .|. b)
     {-# INLINE shift #-}
+
+splitOn :: ByteString -> ByteString -> [ByteString]
+splitOn pat = go
+  where
+    patLen = length pat
+    breaker = breakSubstring pat
+    go s = pre : remainder
+      where
+        (pre, post) = breaker s
+        remainder =
+          if null post
+            then []
+            else go (drop patLen post)
 
 -- ---------------------------------------------------------------------
 -- Zipping
