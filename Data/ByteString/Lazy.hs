@@ -149,6 +149,8 @@ module Data.ByteString.Lazy (
         tailsNE,
         stripPrefix,
         stripSuffix,
+        breakSubstring,
+        breakSubstring',
 
         -- ** Breaking into many substrings
         split,
@@ -251,6 +253,11 @@ import System.IO.Unsafe
 
 import Foreign.Ptr
 import Foreign.Storable
+---------------------------------
+import Debug.Trace (trace)
+import qualified Data.Foldable as DF
+import Data.Maybe (fromMaybe)
+import Data.ByteString.Lazy.Internal.Search (searchBoyerMoore)
 
 
 -- -----------------------------------------------------------------------------
@@ -1394,6 +1401,42 @@ stripSuffix :: ByteString -> ByteString -> Maybe ByteString
 stripSuffix x y = reverse <$> stripPrefix (reverse x) (reverse y)
 --TODO: a better implementation
 
+
+-- | Break a string on a substring, returning a pair of the part of the
+-- string prior to the match, and the rest of the string.
+breakSubstring :: S.ByteString  -- ^ Pattern to break on
+                -> ByteString  -- ^ String to break up
+                -> (ByteString, ByteString)
+                    -- ^ Prefix and remainder of broken string
+breakSubstring pat src = breaker . toChunks $ src
+  where
+    patLen = S.length pat
+    breaker chunkList = fromMaybe (src, empty) (search (0 :: Integer) 0 chunkList) 
+    search globalInd localInd chunkList@(searchStr:xs)
+      | localInd >= chunkLen = if DF.length chunkList <= 1
+                                then Nothing
+                                else search globalInd 0 xs
+      | otherwise = case go globalInd localInd 0 chunkList of
+                    Just resInd -> Just . splitAt (fromIntegral resInd) $ src
+                    Nothing -> search (globalInd + 1) (localInd + 1) chunkList
+      where
+        chunkLen = S.length searchStr
+    go globalInd _ patInd []
+      | patInd >= patLen = Just globalInd
+      | otherwise = Nothing
+    go globalInd localInd patInd chunkList@(searchStr:xs)
+      | localInd >= chunkLen = go globalInd 0 patInd xs
+      | patInd >= patLen = Just globalInd
+      | S.index searchStr localInd == S.index pat patInd 
+                        = go globalInd (localInd + 1) (patInd + 1) chunkList
+      | otherwise = Nothing
+      where
+        chunkLen = S.length searchStr
+
+breakSubstring' :: S.ByteString -> ByteString -> (ByteString, ByteString)
+breakSubstring' pat str = case searchBoyerMoore pat str of
+  Just i -> splitAt (fromIntegral i) str
+  Nothing -> (empty, empty)
 -- ---------------------------------------------------------------------
 -- Zipping
 
